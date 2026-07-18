@@ -409,6 +409,14 @@ set(_obn_bambusource_sources
     src/log.cpp
     src/os_compat.cpp
 )
+if(APPLE)
+    enable_language(OBJCXX)
+    list(APPEND _obn_bambusource_sources
+        stubs/BambuPlayerMac.mm
+        stubs/h264_sample_adapter.cpp)
+    set_source_files_properties(stubs/BambuPlayerMac.mm PROPERTIES
+        COMPILE_FLAGS "-fno-objc-arc")
+endif()
 if(WIN32)
     list(APPEND _obn_bambusource_sources
         stubs/dshow_filter.cpp
@@ -430,6 +438,23 @@ if(WIN32)
         ws2_32 crypt32 secur32 bcrypt iphlpapi
         strmiids ole32 oleaut32 uuid
         advapi32 shell32 user32
+    )
+elseif(APPLE)
+    set_target_properties(BambuSource PROPERTIES OUTPUT_NAME "BambuSource" PREFIX "lib")
+    find_library(OBN_APPKIT_FRAMEWORK AppKit REQUIRED)
+    find_library(OBN_AVFOUNDATION_FRAMEWORK AVFoundation REQUIRED)
+    find_library(OBN_COREMEDIA_FRAMEWORK CoreMedia REQUIRED)
+    find_library(OBN_COREVIDEO_FRAMEWORK CoreVideo REQUIRED)
+    find_library(OBN_FOUNDATION_FRAMEWORK Foundation REQUIRED)
+    find_library(OBN_QUARTZCORE_FRAMEWORK QuartzCore REQUIRED)
+    target_link_libraries(BambuSource PRIVATE
+        OpenSSL::SSL OpenSSL::Crypto
+        ${OBN_APPKIT_FRAMEWORK}
+        ${OBN_AVFOUNDATION_FRAMEWORK}
+        ${OBN_COREMEDIA_FRAMEWORK}
+        ${OBN_COREVIDEO_FRAMEWORK}
+        ${OBN_FOUNDATION_FRAMEWORK}
+        ${OBN_QUARTZCORE_FRAMEWORK}
     )
 else()
     set_target_properties(BambuSource PROPERTIES OUTPUT_NAME "BambuSource" PREFIX "lib")

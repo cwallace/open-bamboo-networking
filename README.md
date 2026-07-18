@@ -106,7 +106,8 @@ Please note:
 - Linux x86_64 (primary target).
 - Linux aarch64 (primary target).
 - Windows x64 (experimental).
-- macOS (very experimental, works partially, not documented yet).
+- macOS (experimental; OrcaSlicer LiveView is validated on Apple Silicon with
+  X1C/X1Plus, while Intel and broader client coverage remain limited).
 
 ## Supported Bambu Studio versions (ABI versions)
 
@@ -236,7 +237,7 @@ difference is what happens inside.
 | Feature                                 | Applies to                        | Status             | Impl   | Notes                                                                                                                                             |
 | --------------------------------------- | --------------------------------- | ------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | MJPEG over TLS, port 6000               | A1, A1 mini                       | ✅ (not tested)    | Native | Same TCP-over-TLS stream the stock plugin consumes. The author has no such printer to test.                                                       |
-| RTSPS → H.264 byte-stream, port 322     | P1S, X1 (all), P2S, H-series, X2D | ✅ (tested on P2S) | Native | Same wire format the stock plugin uses: raw H.264 Annex-B byte-stream out via `Bambu_ReadSample`; the slicer's vendored `gstbambusrc` decodes it. |
+| RTSPS → H.264 byte-stream, port 322     | P1S, X1 (all), P2S, H-series, X2D | ✅ (tested on P2S and X1C/X1Plus) | Native | Raw H.264 Annex-B access units via `Bambu_ReadSample`. Linux uses the slicer's vendored `gstbambusrc`; macOS uses the native `BambuPlayer` adapter and `AVSampleBufferDisplayLayer`. |
 | Cloud camera (TUTK / Agora p2p)         | any printer out of LAN            | ❌                 | ❌     | Proprietary libraries.                                                                                                                            |
 
 #### File browser (Device → Files)
