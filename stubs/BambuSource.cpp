@@ -127,9 +127,9 @@
 #include "tls_socket.hpp"
 
 #if defined(_WIN32)
-#    define OBN_EXPORT extern "C" __declspec(dllexport)
+#    define OBN_EXPORT __declspec(dllexport)
 #else
-#    define OBN_EXPORT extern "C" __attribute__((visibility("default")))
+#    define OBN_EXPORT __attribute__((visibility("default")))
 #endif
 
 // -----------------------------------------------------------------------
@@ -1531,6 +1531,8 @@ void stop_ctrl_mode(Tunnel* t)
 // Exported BambuLib API
 // =======================================================================
 
+extern "C" {
+
 OBN_EXPORT int Bambu_Init()
 {
     ssl_init_once();
@@ -1902,3 +1904,5 @@ OBN_EXPORT int bambu_source_is_stub()
 {
     return 0; // now a real implementation
 }
+
+} // extern "C"
