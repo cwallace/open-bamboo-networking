@@ -1,15 +1,12 @@
 # Build a release distribution and create a draft GitHub Release.
 #
 # Mirrors the interim build.yml pipeline but with OBN_RELEASE=ON so the plugin
-# reports the project version instead of a commit hash. Triggered by pushing a
-# version tag (v*) or manually via workflow_dispatch.
+# reports the project version instead of a commit hash. Triggered manually so
+# publishing the draft release and its tag cannot start a duplicate run.
 
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       tag:

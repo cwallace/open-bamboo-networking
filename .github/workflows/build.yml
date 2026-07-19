@@ -32,6 +32,8 @@ name: Build
 
 on:
   push:
+    branches:
+      - master
   workflow_dispatch:
   pull_request:
 
@@ -351,74 +353,3 @@ jobs:
             dist-out/*.tar.gz
             dist-out/*.zip
           if-no-files-found: error
-
-  pages:
-    name: Deploy download page
-    needs: [package]
-    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Download distribution archives
-        uses: actions/download-artifact@v6
-        with:
-          name: obn-distributions
-          path: dist-out/
-
-      - name: Generate download page
-        run: |
-          set -eu
-          mkdir -p site
-
-          COMMIT="${GITHUB_SHA}"
-          SHORT="${COMMIT:0:7}"
-          DATE="$(date -u '+%Y-%m-%d %H:%M UTC')"
-          REPO="${GITHUB_REPOSITORY}"
-
-          # Build table rows from archive files
-          ROWS=""
-          for f in dist-out/*.tar.gz dist-out/*.zip; do
-            [ -f "$f" ] || continue
-            name=$(basename "$f")
-            size=$(du -h "$f" | cut -f1)
-            cp "$f" "site/$name"
-
-            # Extract platform from filename
-            case "$name" in
-              *linux-x64*)       platform="Linux x64" ;;
-              *linux-aarch64*)   platform="Linux aarch64" ;;
-              *windows-x64*)     platform="Windows x64" ;;
-              *macos-arm64*)     platform="macOS (Apple Silicon)" ;;
-              *macos-x64*|*macos-intel*) platform="macOS (Intel)" ;;
-              *)                 platform="$name" ;;
-            esac
-
-            ROWS="${ROWS}<tr><td>${platform}</td>"
-            ROWS="${ROWS}<td><a href=\"${name}\">${name}</a></td>"
-            ROWS="${ROWS}<td>${size}</td></tr>\n"
-          done
-
-          sed \
-            -e "s|@COMMIT@|${COMMIT}|g" \
-            -e "s|@SHORT_COMMIT@|${SHORT}|g" \
-            -e "s|@DATE@|${DATE}|g" \
-            -e "s|@REPO@|${REPO}|g" \
-            -e "s|@TABLE_ROWS@|${ROWS}|g" \
-            packaging/pages-index.html.in > site/index.html
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site/
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
