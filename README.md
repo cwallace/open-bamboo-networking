@@ -3,6 +3,19 @@
 Open-source drop-in replacement for Bambu Studio's proprietary `bambu_networking`
 plugin.
 
+> [!IMPORTANT]
+> This repository is a macOS-focused fork of
+> [ClusterM/open-bamboo-networking](https://github.com/ClusterM/open-bamboo-networking),
+> originally created and maintained by
+> [Alexey Cluster](https://github.com/ClusterM). This fork is maintained by
+> [Christopher Wallace](https://github.com/cwallace) to provide reliable
+> OrcaSlicer LiveView on macOS, including the native `BambuPlayer` bridge needed
+> for X1/X1Plus LAN RTSPS streams, and Developer ID-signed and notarized macOS
+> releases that install without per-library Gatekeeper approval. It remains
+> LAN-first and does not require Bambu Cloud for printing or camera streaming.
+> Cross-platform work and protocol research continue to come from the upstream
+> project, whose authorship and support links are preserved below.
+
 ## Table of contents
 
 - [Downloads](#downloads)
@@ -38,10 +51,16 @@ plugin.
 
 Pre-built plugin binaries are available for all supported platforms.
 
-**Stable releases:** [GitHub Releases](https://github.com/ClusterM/open-bamboo-networking/releases)
-— tested and tagged versions recommended for general use.
+**Signed macOS fork releases:**
+[cwallace/open-bamboo-networking releases](https://github.com/cwallace/open-bamboo-networking/releases)
+— macOS-focused builds from this fork, signed with a Developer ID certificate
+and notarized by Apple.
 
-**Interim builds:** [GitHub Pages](https://clusterm.github.io/open-bamboo-networking/)
+**Upstream stable releases:**
+[ClusterM/open-bamboo-networking releases](https://github.com/ClusterM/open-bamboo-networking/releases)
+— tested and tagged releases from the original project.
+
+**Upstream interim builds:** [GitHub Pages](https://clusterm.github.io/open-bamboo-networking/)
 — automatically built from the latest commit on the main branch. These
 builds may include new features and bug fixes ahead of the next release, but
 they can also be unstable, contain incomplete functionality, or introduce
