@@ -196,7 +196,7 @@ jobs:
   build-macos:
     name: v${{ matrix.abi }}.xx-macos-${{ matrix.arch }}
     needs: [preflight]
-    runs-on: ${{ matrix.arch == 'arm64' && 'macos-latest' || 'macos-latest-large' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'macos-latest' || 'macos-15-intel' }}
     strategy:
       fail-fast: false
       matrix:
