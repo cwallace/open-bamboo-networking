@@ -262,7 +262,7 @@ jobs:
   package:
     name: Package distributions
     needs: [build, build-windows, build-macos]
-    runs-on: ubuntu-24.04
+    runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -277,6 +277,123 @@ jobs:
           OBN_BUILD_TYPE: release
         run: scripts/package-dist.sh artifacts dist-out
 
+      - name: Import Developer ID certificate
+        shell: bash
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+
+          if [ -z "$CERTIFICATE_BASE64" ] || [ -z "$CERTIFICATE_PASSWORD" ]; then
+            echo "::error::macOS signing secrets are not configured"
+            exit 1
+          fi
+
+          printf '%s' "$CERTIFICATE_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" \
+            -P "$CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PASSWORD" \
+            "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+          SIGNING_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
+            | sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' \
+            | head -n1)
+          if [ -z "$SIGNING_IDENTITY" ]; then
+            echo "::error::No Developer ID Application identity found in signing certificate"
+            exit 1
+          fi
+
+          echo "SIGNING_IDENTITY=$SIGNING_IDENTITY" >> "$GITHUB_ENV"
+
+      - name: Sign macOS libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          for stage_dir in dist-out/obn-macos-arm64 dist-out/obn-macos-x64; do
+            if [ ! -d "$stage_dir" ]; then
+              echo "::error::Missing macOS staging directory: $stage_dir"
+              exit 1
+            fi
+
+            while IFS= read -r -d '' library; do
+              codesign \
+                --force \
+                --options runtime \
+                --timestamp \
+                --sign "$SIGNING_IDENTITY" \
+                "$library"
+              codesign --verify --strict --verbose=2 "$library"
+            done < <(find "$stage_dir" -type f -name '*.dylib' -print0)
+          done
+
+      - name: Create, notarize, and staple macOS disk images
+        shell: bash
+        env:
+          NOTARY_APPLE_ID: ${{ secrets.APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_APP_PASSWORD }}
+          NOTARY_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "$NOTARY_APPLE_ID" ] || [ -z "$NOTARY_PASSWORD" ] || [ -z "$NOTARY_TEAM_ID" ]; then
+            echo "::error::Apple notarization secrets are not configured"
+            exit 1
+          fi
+
+          for arch in arm64 x64; do
+            stage_dir="dist-out/obn-macos-$arch"
+            disk_image="dist-out/obn-macos-$arch.dmg"
+
+            rm -f "dist-out/obn-macos-$arch.tar.gz"
+            tar -C dist-out -czf "dist-out/obn-macos-$arch.tar.gz" "obn-macos-$arch"
+
+            hdiutil create \
+              -volname "Open Bamboo Networking $arch" \
+              -srcfolder "$stage_dir" \
+              -ov \
+              -format UDZO \
+              "$disk_image"
+            codesign \
+              --force \
+              --timestamp \
+              --sign "$SIGNING_IDENTITY" \
+              "$disk_image"
+            codesign --verify --strict --verbose=2 "$disk_image"
+
+            xcrun notarytool submit "$disk_image" \
+              --apple-id "$NOTARY_APPLE_ID" \
+              --password "$NOTARY_PASSWORD" \
+              --team-id "$NOTARY_TEAM_ID" \
+              --wait
+            xcrun stapler staple "$disk_image"
+            xcrun stapler validate "$disk_image"
+            spctl --assess --verbose=4 \
+              --type open \
+              --context context:primary-signature \
+              "$disk_image"
+          done
+
+      - name: Remove temporary signing keychain
+        if: always()
+        shell: bash
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          if [ -e "$KEYCHAIN_PATH" ]; then
+            security delete-keychain "$KEYCHAIN_PATH"
+          fi
+          rm -f "$RUNNER_TEMP/developer-id.p12"
+
       - name: Upload distribution archives
         uses: actions/upload-artifact@v6
         with:
@@ -284,6 +401,7 @@ jobs:
           path: |
             dist-out/*.tar.gz
             dist-out/*.zip
+            dist-out/*.dmg
           if-no-files-found: error
 
   release:
@@ -318,4 +436,4 @@ jobs:
             --draft \
             --title "$TAG" \
             --notes "Release $TAG" \
-            dist-out/*.tar.gz dist-out/*.zip
+            dist-out/*.tar.gz dist-out/*.zip dist-out/*.dmg
