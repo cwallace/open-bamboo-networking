@@ -1610,8 +1610,7 @@ OBN_EXPORT int Bambu_Create(Bambu_Tunnel* tunnel, char const* path)
     auto* t = new Tunnel();
     // Hide the password from the mirror log but keep the host/port/user
     // portion so we know what the caller actually asked for.
-    log_fmt(t->logger, t->log_ctx, "Bambu_Create: url=%.160s%s", path,
-            std::strlen(path) > 160 ? "..." : "");
+    log_fmt(t->logger, t->log_ctx, "Bambu_Create: parsing URL");
     if (!parse_url(path, &t->url)) {
         log_fmt(t->logger, t->log_ctx, "Bambu_Create: bad URL");
         delete t;

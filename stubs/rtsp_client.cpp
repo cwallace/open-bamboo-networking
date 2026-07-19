@@ -9,12 +9,11 @@
 // from RFC 2326 section 10.12. The interleaved channels are picked at
 // SETUP time -- we always ask for 0 = RTP, 1 = RTCP.
 //
-// The control plane keeps running after PLAY: GET_PARAMETER keepalive
-// requests fire every 15 seconds on a worker thread to avoid Bambu's
-// 30 s idle teardown. Their responses come back through the same TCP
-// connection; we let them flow into the demux loop, which recognises
-// them by the leading "RTSP/" string instead of the '$' interleave
-// marker, drains the response, and continues.
+// The control plane keeps running after PLAY: the worker sends RTCP receiver
+// reports every two seconds and GET_PARAMETER requests every 16 seconds.
+// RTCP keeps live555 forwarding RTP; GET_PARAMETER avoids Bambu's RTSP-session
+// idle teardown. Responses flow through the data demux, which recognises them
+// by the leading "RTSP/" string instead of the '$' interleave marker.
 
 #include "rtsp_client.hpp"
 
@@ -42,6 +41,7 @@
 #endif
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cctype>
 #include <chrono>
@@ -555,10 +555,19 @@ struct Client::Impl {
     std::atomic<bool>       stop_flag{false};
     std::condition_variable keepalive_cv;
     std::mutex              keepalive_mu;
+    std::uint32_t           receiver_ssrc = 0;
 
     H264Track track;
 
-    Impl(Logger l, void* c) : logger(l ? l : obn::source::noop_logger), log_ctx(c) {}
+    Impl(Logger l, void* c) : logger(l ? l : obn::source::noop_logger), log_ctx(c)
+    {
+        const auto ticks = std::chrono::steady_clock::now()
+                               .time_since_epoch().count();
+        receiver_ssrc = static_cast<std::uint32_t>(ticks) ^
+                        static_cast<std::uint32_t>(
+                            reinterpret_cast<std::uintptr_t>(this));
+        if (receiver_ssrc == 0) receiver_ssrc = 1;
+    }
 
     ~Impl() = default;
 
@@ -883,14 +892,54 @@ struct Client::Impl {
 
     // ----- keepalive -----
 
+    bool send_rtcp_receiver_report()
+    {
+        // Some X1/X1Plus live555 servers stop forwarding RTP when the client
+        // never sends RTCP receiver traffic.
+        // Interleaved channel 1 contains an RFC 3550 compound packet: an
+        // empty Receiver Report plus one SDES CNAME chunk.
+        std::array<std::uint8_t, 28> packet{
+            '$', 1, 0, 24,
+            0x80, 201, 0, 1, 0, 0, 0, 0,
+            0x81, 202, 0, 3, 0, 0, 0, 0,
+            1, 3, 'o', 'b', 'n', 0, 0, 0,
+        };
+        auto put_ssrc = [&](std::size_t offset) {
+            packet[offset] = static_cast<std::uint8_t>(receiver_ssrc >> 24);
+            packet[offset + 1] =
+                static_cast<std::uint8_t>(receiver_ssrc >> 16);
+            packet[offset + 2] =
+                static_cast<std::uint8_t>(receiver_ssrc >> 8);
+            packet[offset + 3] = static_cast<std::uint8_t>(receiver_ssrc);
+        };
+        put_ssrc(8);
+        put_ssrc(16);
+
+        std::lock_guard<std::mutex> io_lk(io_mu);
+        return ssl &&
+               obn::tls::ssl_write_all(ssl, packet.data(), packet.size()) == 0;
+    }
+
     void keepalive_main()
     {
+        unsigned rtcp_ticks = 0;
         while (!stop_flag.load(std::memory_order_acquire)) {
             std::unique_lock<std::mutex> lk(keepalive_mu);
-            keepalive_cv.wait_for(lk, std::chrono::seconds(15), [&] {
+            keepalive_cv.wait_for(lk, std::chrono::seconds(2), [&] {
                 return stop_flag.load(std::memory_order_acquire);
             });
             if (stop_flag.load(std::memory_order_acquire)) break;
+            lk.unlock();
+
+            if (!send_rtcp_receiver_report()) {
+                log_at(LL_DEBUG, logger, log_ctx,
+                       "rtsp: RTCP receiver report write failed");
+                break;
+            }
+            log_at(LL_TRACE, logger, log_ctx,
+                   "rtsp: RTCP receiver report sent");
+            if (++rtcp_ticks % 8 != 0) continue;
+
             // GET_PARAMETER with no body is the standard idle ping
             // live555 accepts. Build the request inline (instead of
             // through send_request) so we keep the Session: header
