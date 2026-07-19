@@ -4,6 +4,13 @@
 
 #include <cstdint>
 
+#if defined(_WIN32)
+#    define OBN_BAMBU_SOURCE_EXPORT __declspec(dllexport)
+#else
+#    define OBN_BAMBU_SOURCE_EXPORT \
+        __attribute__((visibility("default")))
+#endif
+
 extern "C" {
 
 using Bambu_Tunnel = void*;
@@ -62,19 +69,25 @@ struct Bambu_Sample {
 using BambuLogger = void (*)(void* context, int level,
                              const BambuChar* message);
 
-int Bambu_Init();
-void Bambu_Deinit();
-int Bambu_Create(Bambu_Tunnel* tunnel, const char* path);
-void Bambu_SetLogger(Bambu_Tunnel tunnel, BambuLogger logger, void* context);
-int Bambu_Open(Bambu_Tunnel tunnel);
-int Bambu_StartStream(Bambu_Tunnel tunnel, bool video);
-int Bambu_GetStreamCount(Bambu_Tunnel tunnel);
-int Bambu_GetStreamInfo(Bambu_Tunnel tunnel, int index,
-                        Bambu_StreamInfo* info);
-int Bambu_ReadSample(Bambu_Tunnel tunnel, Bambu_Sample* sample);
-void Bambu_Close(Bambu_Tunnel tunnel);
-void Bambu_Destroy(Bambu_Tunnel tunnel);
-const char* Bambu_GetLastErrorMsg();
-void Bambu_FreeLogMsg(const BambuChar* message);
+OBN_BAMBU_SOURCE_EXPORT int Bambu_Init();
+OBN_BAMBU_SOURCE_EXPORT void Bambu_Deinit();
+OBN_BAMBU_SOURCE_EXPORT int Bambu_Create(Bambu_Tunnel* tunnel,
+                                         const char* path);
+OBN_BAMBU_SOURCE_EXPORT void Bambu_SetLogger(Bambu_Tunnel tunnel,
+                                             BambuLogger logger,
+                                             void* context);
+OBN_BAMBU_SOURCE_EXPORT int Bambu_Open(Bambu_Tunnel tunnel);
+OBN_BAMBU_SOURCE_EXPORT int Bambu_StartStream(Bambu_Tunnel tunnel,
+                                              bool video);
+OBN_BAMBU_SOURCE_EXPORT int Bambu_GetStreamCount(Bambu_Tunnel tunnel);
+OBN_BAMBU_SOURCE_EXPORT int Bambu_GetStreamInfo(Bambu_Tunnel tunnel,
+                                                int index,
+                                                Bambu_StreamInfo* info);
+OBN_BAMBU_SOURCE_EXPORT int Bambu_ReadSample(Bambu_Tunnel tunnel,
+                                             Bambu_Sample* sample);
+OBN_BAMBU_SOURCE_EXPORT void Bambu_Close(Bambu_Tunnel tunnel);
+OBN_BAMBU_SOURCE_EXPORT void Bambu_Destroy(Bambu_Tunnel tunnel);
+OBN_BAMBU_SOURCE_EXPORT const char* Bambu_GetLastErrorMsg();
+OBN_BAMBU_SOURCE_EXPORT void Bambu_FreeLogMsg(const BambuChar* message);
 
 } // extern "C"

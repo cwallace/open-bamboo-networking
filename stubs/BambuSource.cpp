@@ -126,11 +126,7 @@
 #include "rtsp_passthrough.hpp"
 #include "tls_socket.hpp"
 
-#if defined(_WIN32)
-#    define OBN_EXPORT __declspec(dllexport)
-#else
-#    define OBN_EXPORT __attribute__((visibility("default")))
-#endif
+#define OBN_EXPORT OBN_BAMBU_SOURCE_EXPORT
 
 // -----------------------------------------------------------------------
 // The private ABI declarations shared with platform presentation adapters
