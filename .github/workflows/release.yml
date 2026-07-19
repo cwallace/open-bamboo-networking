@@ -17,7 +17,7 @@ on:
         required: true
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -196,7 +196,11 @@ jobs:
   build-macos:
     name: v${{ matrix.abi }}.xx-macos-${{ matrix.arch }}
     needs: [preflight]
-    runs-on: ${{ matrix.arch == 'arm64' && 'macos-latest' || 'macos-15-intel' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'macos-15' || 'macos-15-intel' }}
+    env:
+      # Pin the toolchain so a runner-image update cannot silently raise the
+      # deployment target of the distributed dylibs.
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
     strategy:
       fail-fast: false
       matrix:
@@ -231,10 +235,27 @@ jobs:
             --enable-tests \
             --with-version='${{ matrix.abi }}.99' \
             --no-conf-patch \
-            --cmake-arg=-DOBN_RELEASE=ON
+            --cmake-arg=-DOBN_RELEASE=ON \
+            --cmake-arg=-DCMAKE_OSX_DEPLOYMENT_TARGET=11.3
 
       - name: Build
         run: make -j"$(sysctl -n hw.ncpu)"
+
+      - name: Verify macOS deployment target
+        shell: bash
+        run: |
+          set -euo pipefail
+          for library in build/*.dylib; do
+            minos=$(otool -l "$library" | awk '
+              /LC_BUILD_VERSION/ { in_build = 1; next }
+              in_build && $1 == "minos" { print $2; exit }
+            ')
+            if [ "$minos" != "11.3" ]; then
+              echo "::error file=$library::Expected macOS 11.3 deployment target, found ${minos:-none}"
+              exit 1
+            fi
+            echo "$library: macOS $minos"
+          done
 
       - name: Run tests
         run: make test
@@ -262,7 +283,8 @@ jobs:
   package:
     name: Package distributions
     needs: [build, build-windows, build-macos]
-    runs-on: macos-latest
+    runs-on: macos-15
+    environment: macos-signing
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -408,6 +430,8 @@ jobs:
     name: Create draft release
     needs: [package]
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6

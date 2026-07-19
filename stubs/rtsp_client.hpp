@@ -14,11 +14,6 @@
 //     UDP would just add a fallback path no real printer takes.
 //   - Plain RTSP without TLS. The URL parser still accepts rtsp:// for
 //     symmetry / test fixtures, but Bambu never serves it.
-//   - Digest authentication. Every printer firmware we have looked at
-//     speaks Basic; if a future revision returns 401, start() reports
-//     an error and the caller's "could not authenticate" surface fires
-//     (we did not want to ship a half-tested Digest path that nobody
-//     can actually exercise today).
 //   - Random RTSP servers. The SDP parser is good enough for Bambu's
 //     output but is not a general-purpose SDP implementation; in
 //     particular it expects a single H.264 video track, payload type
@@ -30,8 +25,8 @@
 // read_nalu() in a loop and another thread calling stop() exactly
 // once. cancel() is the only call that may be made from any thread:
 // it shuts the socket down to break the producer out of an in-flight
-// SSL_read. The 15-second GET_PARAMETER keepalive runs on its own
-// internal thread that the client owns.
+// SSL_read. An internal worker sends RTCP receiver reports every two
+// seconds and a GET_PARAMETER keepalive every 16 seconds.
 #pragma once
 
 #include <cstdint>

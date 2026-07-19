@@ -56,7 +56,7 @@ struct Bambu_Sample {
     int                  size;
     int                  flags;
     const unsigned char* buffer;
-    unsigned long long   decode_time;
+    unsigned long long   decode_time; // 100 ns units
 };
 
 using BambuLogger = void (*)(void* context, int level,

@@ -72,6 +72,7 @@
 #include <openssl/evp.h>
 #include <openssl/ssl.h>
 
+#include "bambu_source_abi.hpp"
 #include "obn/os_compat.hpp"
 
 #if defined(_WIN32)
@@ -132,70 +133,10 @@
 #endif
 
 // -----------------------------------------------------------------------
-// Types redeclared from BambuTunnel.h. We do NOT include the original
-// header because it is part of Bambu Studio's proprietary build tree
-// (GPL-incompatible). All layout / enum values are checked against
-// OpenBambuAPI documentation and gstbambusrc.c behaviour.
+// The private ABI declarations shared with platform presentation adapters
+// live in bambu_source_abi.hpp. We do not include BambuTunnel.h because it is
+// part of Bambu Studio's proprietary build tree (GPL-incompatible).
 // -----------------------------------------------------------------------
-
-extern "C" {
-
-typedef void* Bambu_Tunnel;
-// Studio's tchar contract differs by platform: Linux/macOS pass char*,
-// Windows passes wchar_t* (matches wxMediaCtrl2's Bambu_FreeLogMsg /
-// gstbambusrc's bambu_log signature).
-#if defined(_WIN32)
-using tchar = wchar_t;
-#else
-using tchar = char;
-#endif
-
-enum Bambu_StreamType { VIDE = 0, AUDI = 1 };
-enum Bambu_VideoSubType { AVC1 = 0, MJPG = 1 };
-enum Bambu_FormatType {
-    video_avc_packet = 0,
-    video_avc_byte_stream,
-    video_jpeg,
-    audio_raw,
-    audio_adts,
-};
-enum Bambu_Error { Bambu_success = 0, Bambu_stream_end, Bambu_would_block, Bambu_buffer_limit };
-
-struct Bambu_StreamInfo {
-    int type;       // Bambu_StreamType
-    int sub_type;   // Bambu_VideoSubType / Bambu_AudioSubType
-    union {
-        struct {
-            int width;
-            int height;
-            int frame_rate;
-        } video;
-        struct {
-            int sample_rate;
-            int channel_count;
-            int sample_size;
-        } audio;
-    } format;
-    int                   format_type;    // Bambu_FormatType
-    int                   format_size;
-    int                   max_frame_size;
-    unsigned char const*  format_buffer;
-};
-
-struct Bambu_Sample {
-    int                   itrack;
-    int                   size;
-    int                   flags;
-    unsigned char const*  buffer;
-    unsigned long long    decode_time; // 100ns units, per gstbambusrc expectations
-};
-
-// Studio's Logger typedef. We keep the C-visible alias so the
-// exported Bambu_SetLogger / Bambu_FreeLogMsg signatures stay
-// byte-identical with what gstbambusrc and wxMediaCtrl2 expect.
-using Logger = void (*)(void* context, int level, tchar const* msg);
-
-} // extern "C"
 
 // -----------------------------------------------------------------------
 // All log/last-error helpers live in stubs/source_log.{hpp,cpp} so the
@@ -440,7 +381,7 @@ struct CtrlReply {
 
 struct Tunnel {
     TunnelUrl        url;
-    Logger           logger  = noop_logger;
+    BambuLogger      logger  = noop_logger;
     void*            log_ctx = nullptr;
 
     // ---- MJPG/TLS state (Scheme::Local) ----
@@ -1608,8 +1549,8 @@ OBN_EXPORT int Bambu_Create(Bambu_Tunnel* tunnel, char const* path)
     if (!tunnel || !path) return -1;
     ssl_init_once();
     auto* t = new Tunnel();
-    // Hide the password from the mirror log but keep the host/port/user
-    // portion so we know what the caller actually asked for.
+    // Never mirror the caller-provided URL: its password field contains the
+    // printer's LAN access code. Parsed non-secret fields are logged below.
     log_fmt(t->logger, t->log_ctx, "Bambu_Create: parsing URL");
     if (!parse_url(path, &t->url)) {
         log_fmt(t->logger, t->log_ctx, "Bambu_Create: bad URL");
@@ -1633,7 +1574,8 @@ OBN_EXPORT int Bambu_Create(Bambu_Tunnel* tunnel, char const* path)
     return Bambu_success;
 }
 
-OBN_EXPORT void Bambu_SetLogger(Bambu_Tunnel tunnel, Logger logger, void* context)
+OBN_EXPORT void Bambu_SetLogger(Bambu_Tunnel tunnel, BambuLogger logger,
+                                void* context)
 {
     auto* t = static_cast<Tunnel*>(tunnel);
     if (!t) return;
@@ -1947,11 +1889,11 @@ OBN_EXPORT char const* Bambu_GetLastErrorMsg()
     return obn::source::get_last_error();
 }
 
-OBN_EXPORT void Bambu_FreeLogMsg(tchar const* msg)
+OBN_EXPORT void Bambu_FreeLogMsg(BambuChar const* msg)
 {
     // We allocated with strdup_for_logger() in log_fmt(): strdup() on
     // POSIX, malloc(wcslen+1) on Windows. Both come back to free().
-    if (msg) std::free(const_cast<tchar*>(msg));
+    if (msg) std::free(const_cast<BambuChar*>(msg));
 }
 
 // Legacy probe: the older stub exported this so callers could tell at a

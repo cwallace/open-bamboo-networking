@@ -1,4 +1,14 @@
 cmake_minimum_required(VERSION 3.20)
+
+# Match OrcaSlicer's Apple Silicon compatibility floor unless the caller
+# explicitly requests another target. This must be set before project() so
+# CMake applies it during compiler and SDK detection as well as target builds.
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin"
+   AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "11.3" CACHE STRING
+        "Minimum supported macOS version" FORCE)
+endif()
+
 project(open-bamboo-networking
     VERSION 0.1.0
     DESCRIPTION "Open Bamboo Networking — open-source replacement for Bambu Studio's bambu_networking plugin"
@@ -399,6 +409,7 @@ set(_obn_bambusource_sources
     stubs/source_log.cpp
     stubs/tls_socket.cpp
     stubs/rtsp_client.cpp
+    stubs/rtcp_packet.cpp
     stubs/rtsp_passthrough.cpp
     src/config.cpp
     src/ftps.cpp
@@ -415,7 +426,7 @@ if(APPLE)
         stubs/BambuPlayerMac.mm
         stubs/h264_sample_adapter.cpp)
     set_source_files_properties(stubs/BambuPlayerMac.mm PROPERTIES
-        COMPILE_FLAGS "-fno-objc-arc")
+        COMPILE_OPTIONS "-fno-objc-arc")
 endif()
 if(WIN32)
     list(APPEND _obn_bambusource_sources
@@ -444,7 +455,6 @@ elseif(APPLE)
     find_library(OBN_APPKIT_FRAMEWORK AppKit REQUIRED)
     find_library(OBN_AVFOUNDATION_FRAMEWORK AVFoundation REQUIRED)
     find_library(OBN_COREMEDIA_FRAMEWORK CoreMedia REQUIRED)
-    find_library(OBN_COREVIDEO_FRAMEWORK CoreVideo REQUIRED)
     find_library(OBN_FOUNDATION_FRAMEWORK Foundation REQUIRED)
     find_library(OBN_QUARTZCORE_FRAMEWORK QuartzCore REQUIRED)
     target_link_libraries(BambuSource PRIVATE
@@ -452,7 +462,6 @@ elseif(APPLE)
         ${OBN_APPKIT_FRAMEWORK}
         ${OBN_AVFOUNDATION_FRAMEWORK}
         ${OBN_COREMEDIA_FRAMEWORK}
-        ${OBN_COREVIDEO_FRAMEWORK}
         ${OBN_FOUNDATION_FRAMEWORK}
         ${OBN_QUARTZCORE_FRAMEWORK}
     )
@@ -642,6 +651,20 @@ if(OBN_BUILD_TESTS)
     endif()
     add_test(NAME plugin_symbols
         COMMAND probe_plugin $<TARGET_FILE:bambu_networking>)
+
+    # Pure framing tests run on every CI platform even though the adapter's
+    # production consumer is the macOS BambuPlayer implementation.
+    add_executable(h264_sample_adapter_test
+        tests/h264_sample_adapter_test.cpp
+        stubs/h264_sample_adapter.cpp)
+    target_include_directories(h264_sample_adapter_test PRIVATE stubs)
+    add_test(NAME h264_sample_adapter COMMAND h264_sample_adapter_test)
+
+    add_executable(rtcp_packet_test
+        tests/rtcp_packet_test.cpp
+        stubs/rtcp_packet.cpp)
+    target_include_directories(rtcp_packet_test PRIVATE stubs)
+    add_test(NAME rtcp_packet COMMAND rtcp_packet_test)
 endif()
 if(OBN_BUILD_TESTS AND NOT WIN32)
 

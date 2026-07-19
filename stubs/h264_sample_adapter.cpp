@@ -1,7 +1,6 @@
 #include "h264_sample_adapter.hpp"
 
 #include <algorithm>
-#include <limits>
 
 namespace obn::h264 {
 namespace {
@@ -79,10 +78,6 @@ ParseResult annexb_to_avcc(const std::uint8_t* data,
         if (nalu_begin >= nalu_end) return ParseResult::EmptyNalu;
 
         const std::size_t nalu_size = nalu_end - nalu_begin;
-        if (nalu_size > std::numeric_limits<std::uint32_t>::max()) {
-            return ParseResult::NaluTooLarge;
-        }
-
         ++out->nal_count;
         const std::uint8_t nal_type = data[nalu_begin] & 0x1f;
         if (nal_type == 7) {
@@ -111,7 +106,6 @@ const char* parse_result_string(ParseResult result)
     case ParseResult::TooLarge:         return "access unit too large";
     case ParseResult::MissingStartCode: return "missing Annex-B start code";
     case ParseResult::EmptyNalu:        return "empty NAL unit";
-    case ParseResult::NaluTooLarge:     return "NAL unit too large";
     }
     return "unknown parse error";
 }

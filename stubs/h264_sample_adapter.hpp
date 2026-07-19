@@ -32,7 +32,6 @@ enum class ParseResult {
     TooLarge,
     MissingStartCode,
     EmptyNalu,
-    NaluTooLarge,
 };
 
 // Parse one complete Annex-B access unit and convert its non-parameter-set

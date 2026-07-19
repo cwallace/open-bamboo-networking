@@ -17,6 +17,7 @@
 
 #include "rtsp_client.hpp"
 
+#include "rtcp_packet.hpp"
 #include "source_log.hpp"
 #include "tls_socket.hpp"
 
@@ -74,7 +75,6 @@ using obn::source::set_last_error;
 // well under 4 KB; any single RTP packet is under 64 KB by definition
 // (the interleave length field is 16 bits).
 constexpr std::size_t kMaxResponseBody = 64u << 10;
-constexpr std::size_t kMaxRtpPacket    = 64u << 10;
 
 // ---------- base64 (small, inline) ----------
 
@@ -765,10 +765,6 @@ struct Client::Impl {
                 int channel = hdr[0];
                 std::uint16_t plen = static_cast<std::uint16_t>(
                     (std::uint16_t(hdr[1]) << 8) | hdr[2]);
-                if (plen > kMaxRtpPacket) {
-                    set_last_error("rtsp: implausible interleaved frame length");
-                    return -1;
-                }
                 std::vector<std::uint8_t> rtp(plen);
                 if (plen > 0) {
                     rc = obn::tls::ssl_read_full(ssl, rtp.data(), plen);
@@ -898,22 +894,8 @@ struct Client::Impl {
         // never sends RTCP receiver traffic.
         // Interleaved channel 1 contains an RFC 3550 compound packet: an
         // empty Receiver Report plus one SDES CNAME chunk.
-        std::array<std::uint8_t, 28> packet{
-            '$', 1, 0, 24,
-            0x80, 201, 0, 1, 0, 0, 0, 0,
-            0x81, 202, 0, 3, 0, 0, 0, 0,
-            1, 3, 'o', 'b', 'n', 0, 0, 0,
-        };
-        auto put_ssrc = [&](std::size_t offset) {
-            packet[offset] = static_cast<std::uint8_t>(receiver_ssrc >> 24);
-            packet[offset + 1] =
-                static_cast<std::uint8_t>(receiver_ssrc >> 16);
-            packet[offset + 2] =
-                static_cast<std::uint8_t>(receiver_ssrc >> 8);
-            packet[offset + 3] = static_cast<std::uint8_t>(receiver_ssrc);
-        };
-        put_ssrc(8);
-        put_ssrc(16);
+        const auto packet =
+            make_interleaved_rtcp_receiver_report(receiver_ssrc);
 
         std::lock_guard<std::mutex> io_lk(io_mu);
         return ssl &&
@@ -982,7 +964,7 @@ struct Client::Impl {
             int channel = hdr[0];
             std::uint16_t plen = static_cast<std::uint16_t>(
                 (std::uint16_t(hdr[1]) << 8) | hdr[2]);
-            if (plen == 0 || plen > kMaxRtpPacket) {
+            if (plen == 0) {
                 set_last_error("rtsp: implausible interleaved frame length");
                 return -1;
             }

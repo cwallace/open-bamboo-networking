@@ -25,20 +25,14 @@
 #include <cstdarg>
 #include <cstdio>
 
+#include "bambu_source_abi.hpp"
+
 namespace obn::source {
 
-// Studio's Logger typedef in tchar form, repeated here so submodules
-// don't need to pull in BambuTunnel.h. char* on Linux/macOS,
-// wchar_t* on Windows (gstbambusrc + wxMediaCtrl2 expect a wide
-// string there). gstbambusrc and our own callers free the message
-// with Bambu_FreeLogMsg, so log_at()/log_fmt() always allocate via
-// malloc-style helpers in the platform's native character width.
-#if defined(_WIN32)
-using obn_tchar = wchar_t;
-#else
-using obn_tchar = char;
-#endif
-using Logger = void (*)(void* ctx, int level, obn_tchar const* msg);
+// Reuse the private BambuSource ABI types so the callback signature cannot
+// drift between the exported implementation and its transport submodules.
+using obn_tchar = BambuChar;
+using Logger = BambuLogger;
 
 enum LogLevel {
     LL_TRACE = 0,
